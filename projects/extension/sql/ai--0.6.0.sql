@@ -3983,6 +3983,7 @@ create or replace procedure ai.load_dataset_multi_txn
 , batch_size int default 5000
 , max_batches int default null
 , commit_every_n_batches int default 1
+, index_start int default null
 , kwargs jsonb default '{}'
 )
 as $python$
@@ -4025,6 +4026,7 @@ as $python$
         batch_size=batch_size,
         max_batches=max_batches,
         commit_every_n_batches=commit_every_n_batches,
+        index_start=index_start,
         **kwargs_dict
     )
 $python$
@@ -4041,6 +4043,7 @@ create or replace function ai.load_dataset
 , batch_size int default 5000
 , max_batches int default null
 , kwargs jsonb default '{}'
+, index_start int default null
 ) returns bigint
 as $python$
     if "ai.version" not in GD:
@@ -4081,6 +4084,7 @@ as $python$
         batch_size=batch_size,
         max_batches=max_batches,
         commit_every_n_batches=None,
+	index_start=index_start,
         **kwargs_dict
     )
 $python$

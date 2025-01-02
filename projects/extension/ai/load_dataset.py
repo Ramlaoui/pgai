@@ -1,4 +1,6 @@
 import json
+import numpy as np
+import gc
 import datasets
 from typing import Optional, Dict, Any
 
@@ -120,7 +122,7 @@ def create_table(
         else:
             plpy.error(f"Unsupported if_table_exists value: {if_table_exists}")
     else:
-        plpy.notice(f"creating table {qualified_table}")
+        plpy.notice(f"creating table {friendly_table_name}")
 
     column_type_def = ", ".join(
         f'"{name}" {col_type}' for name, col_type in column_types.items()
@@ -146,6 +148,7 @@ def load_dataset(
     batch_size: int = 5000,
     max_batches: Optional[int] = None,
     commit_every_n_batches: Optional[int] = None,
+    index_start: Optional[int] = None,
     # Additional dataset loading options
     **kwargs: Dict[str, Any],
 ) -> int:
@@ -180,11 +183,15 @@ def load_dataset(
 
     # Load dataset using Hugging Face datasets library
     ds = datasets.load_dataset(
-        name, config_name, split=split, cache_dir=cache_dir, streaming=True, **kwargs
+        name, config_name, split=split, cache_dir=cache_dir, streaming=False, **kwargs
     )
-    if isinstance(ds, datasets.IterableDatasetDict):
+    if isinstance(ds, datasets.DatasetDict):
+        if index_start is not None:
+            ds = {split: dataset.select(range(index_start, len(dataset))) for split, dataset in ds.items()}
         datasetdict = ds
-    elif isinstance(ds, datasets.IterableDataset):
+    elif isinstance(ds, datasets.Dataset):
+        if index_start is not None:
+            ds = ds.select(range(index_start, len(ds)))
         datasetdict = {split: ds}
     else:
         plpy.error(
@@ -232,7 +239,7 @@ def load_dataset(
                 elif type_str in ("int64", "int32", "int16", "int8"):
                     batch_arrays[i] = [int(value) for value in array_values]
                 elif type_str in ("float64", "float32", "float16"):
-                    batch_arrays[i] = [float(value) for value in array_values]
+                    batch_arrays[i] = [float(value if value else float('nan')) for value in array_values]
                 else:
                     batch_arrays[i] = array_values
 
@@ -249,5 +256,8 @@ def load_dataset(
             ):
                 plpy.commit()
                 batches_since_commit = 0
+            del batch, batch_arrays
+            gc.collect()
+
 
     return num_rows
